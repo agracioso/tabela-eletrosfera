@@ -224,7 +224,7 @@
                 <h3 class="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
                   <i class="fa-solid fa-arrow-trend-up"></i> Ordem Energética (Aufbau)
                 </h3>
-                <span class="text-[10px] text-slate-400">Menor $\rightarrow$ Maior Energia</span>
+                <span class="text-[10px] text-slate-400">Menor &rarr; Maior Energia</span>
               </div>
               <p class="text-xs font-mono bg-slate-900/90 p-3 rounded-lg border border-slate-800 text-slate-200 break-words leading-relaxed select-all" id="detEnergeticConfig">
                 1s² 2s² 2p⁶ 3s² 3p⁶ 4s² 3d¹⁰ 4p⁶ 5s² 4d¹⁰ 5p³
@@ -865,6 +865,39 @@
 
       const totalElectrons = element.z - charge;
 
+      // Calcular dinamicamente o subnível mais energético atual
+      let mostEnergeticFormatted = '—';
+      for (let i = SUBNIVEIS_ORDER.length - 1; i >= 0; i--) {
+        const sName = SUBNIVEIS_ORDER[i].name;
+        if (counts[sName] > 0) {
+          mostEnergeticFormatted = `${sName}<sup>${counts[sName]}</sup>`;
+          break;
+        }
+      }
+
+      // Calcular dinamicamente a camada de valência física mais externa atual
+      let currentMaxN = 0;
+      for (let n = 7; n >= 1; n--) {
+        if (layers[n] > 0) {
+          currentMaxN = n;
+          break;
+        }
+      }
+
+      let valenceFormatted = 'Nenhum elétron';
+      let currentValenceCount = 0;
+      if (currentMaxN > 0) {
+        const letter = LAYER_LETTERS[currentMaxN];
+        const valSubParts = [];
+        SUBNIVEIS_ORDER.forEach(sub => {
+          if (sub.n === currentMaxN && counts[sub.name] > 0) {
+            valSubParts.push(`${sub.name}<sup>${counts[sub.name]}</sup>`);
+            currentValenceCount += counts[sub.name];
+          }
+        });
+        valenceFormatted = `${letter} (n=${currentMaxN}): ${valSubParts.join(' ')} (${currentValenceCount} e⁻)`;
+      }
+
       return {
         counts,
         modifiedSubs,
@@ -872,7 +905,10 @@
         geometricText: geometricParts.join(' '),
         layers,
         explanation,
-        totalElectrons
+        totalElectrons,
+        mostEnergeticFormatted,
+        valenceFormatted,
+        currentValenceCount
       };
     }
 
@@ -894,10 +930,7 @@
       document.getElementById('detMass').innerText = `Massa: ${el.mass} u`;
       document.getElementById('detGroupBadge').innerText = CATEGORY_NAMES[el.group] || el.group;
       document.getElementById('detGroupBadge').className = `text-xs uppercase tracking-wider px-2.5 py-1 rounded-full font-bold cat-${el.group} text-white shadow-md`;
-
       document.getElementById('detPeriod').innerText = `${el.period}º`;
-      document.getElementById('detValenceElectrons').innerText = `${el.valenceElectrons} e⁻`;
-      document.getElementById('detMostEnergetic').innerHTML = el.mostEnergetic;
 
       renderCurrentIonState();
     }
@@ -944,6 +977,12 @@
       document.getElementById('detEnergeticConfig').innerHTML = ionData.energeticText || '<i class="text-slate-500">Nenhum elétron</i>';
       document.getElementById('detGeometricConfig').innerHTML = ionData.geometricText || '<i class="text-slate-500">Nenhum elétron</i>';
       document.getElementById('totalElectronsLabel').innerText = `${ionData.totalElectrons} elétrons`;
+
+      // Atualizar indicadores de subnível mais energético e camada de valência em tempo real
+      document.getElementById('subEnergeticLast').innerHTML = ionData.mostEnergeticFormatted;
+      document.getElementById('valGeometricLast').innerHTML = ionData.valenceFormatted;
+      document.getElementById('detMostEnergetic').innerHTML = ionData.mostEnergeticFormatted;
+      document.getElementById('detValenceElectrons').innerText = `${ionData.currentValenceCount} e⁻`;
 
       // Atualizar grade dos 19 subníveis
       renderSublevelsGrid(ionData);
