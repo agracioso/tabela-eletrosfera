@@ -312,7 +312,12 @@
             <h2 class="text-base font-bold text-cyan-400 flex items-center gap-2">
               <i class="fa-solid fa-table-list"></i> Tabela Completa de Dados & Distribuição Eletrônica (24 Colunas)
             </h2>
-            <p class="text-xs text-slate-400">Todos os 118 elementos químicos com as 19 colunas de subníveis + representações completas.</p>
+            <div class="flex flex-wrap items-center gap-2 mt-1">
+              <p class="text-xs text-slate-400">Todos os elementos químicos com as 19 colunas de subníveis + representações completas.</p>
+              <span id="spreadsheetFilterInfo" class="px-2.5 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 font-mono text-[11px] font-semibold border border-cyan-800/60">
+                Exibindo todos os 118 elementos
+              </span>
+            </div>
           </div>
           <button onclick="downloadCSV()" class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition flex items-center gap-2">
             <i class="fa-solid fa-file-csv"></i> Baixar Tabela em CSV
@@ -366,12 +371,18 @@
             </div>
             <div>
               <h2 class="text-base font-bold text-purple-200">Desafio Quântico: Teste de Conhecimento</h2>
-              <p class="text-xs text-slate-400">Perguntas sobre distribuição, subníveis e valência</p>
+              <p class="text-xs text-slate-400">Perguntas dinâmicas com explicações detalhadas a cada rodada</p>
             </div>
           </div>
-          <div class="text-right">
-            <span class="text-xs text-slate-400 block">Pontuação</span>
-            <span class="text-xl font-mono font-bold text-yellow-400" id="quizScore">0 pts</span>
+          <div class="flex items-center gap-4 text-right">
+            <div>
+              <span class="text-[10px] text-slate-400 block uppercase">Sequência</span>
+              <span class="text-sm font-mono font-bold text-emerald-400" id="quizStreak">🔥 0</span>
+            </div>
+            <div>
+              <span class="text-[10px] text-slate-400 block uppercase">Pontuação</span>
+              <span class="text-xl font-mono font-bold text-yellow-400" id="quizScore">0 pts</span>
+            </div>
           </div>
         </div>
 
@@ -1154,6 +1165,23 @@
       if (lanthTitle) lanthTitle.style.opacity = matches.some(m => isLanthanide(m.z)) ? '1' : '0.2';
       if (actTitle) actTitle.style.opacity = matches.some(m => isActinide(m.z)) ? '1' : '0.2';
 
+      let matchingRowsCount = 0;
+      document.querySelectorAll('#spreadsheetBody tr').forEach(row => {
+        const id = parseInt(row.dataset.z, 10);
+        const isMatch = matches.some(m => m.z === id);
+        if (isMatch) {
+          row.style.display = '';
+          matchingRowsCount++;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      const info = document.getElementById('spreadsheetFilterInfo');
+      if (info) {
+        info.innerText = `Busca "${query}": ${matchingRowsCount} elemento(s) encontrado(s)`;
+      }
+
       // Se houver correspondência exata, selecionar diretamente
       const exactMatch = matches.find(m => 
         m.name.toLowerCase() === q || 
@@ -1212,6 +1240,14 @@
       const actTitle = document.getElementById('actTitle');
       if (lanthTitle) lanthTitle.style.opacity = '1';
       if (actTitle) actTitle.style.opacity = '1';
+
+      document.querySelectorAll('#spreadsheetBody tr').forEach(row => {
+        row.style.display = '';
+      });
+      const info = document.getElementById('spreadsheetFilterInfo');
+      if (info) {
+        info.innerText = 'Exibindo todos os 118 elementos';
+      }
     }
 
     function filterByGroup(groupKey) {
@@ -1260,6 +1296,24 @@
       }
       if (actTitle) {
         actTitle.style.opacity = (groupKey === 'all' || groupKey === 'actinideos') ? '1' : '0.2';
+      }
+
+      let visibleCount = 0;
+      document.querySelectorAll('#spreadsheetBody tr').forEach(row => {
+        const rowGroup = row.dataset.group;
+        if (groupKey === 'all' || rowGroup === groupKey) {
+          row.style.display = '';
+          visibleCount++;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      const info = document.getElementById('spreadsheetFilterInfo');
+      if (info) {
+        info.innerText = groupKey === 'all' 
+          ? 'Exibindo todos os 118 elementos' 
+          : `Exibindo ${visibleCount} elemento(s) (${CATEGORY_NAMES[groupKey] || groupKey})`;
       }
 
       // Selecionar automaticamente o primeiro elemento da família para atualizar o painel
@@ -1413,6 +1467,11 @@
 
       ELEMENTS.forEach(el => {
         const tr = document.createElement('tr');
+        tr.id = `row-el-${el.z}`;
+        tr.dataset.z = el.z;
+        tr.dataset.group = el.group;
+        tr.dataset.name = el.name.toLowerCase();
+        tr.dataset.symbol = el.symbol.toLowerCase();
         tr.className = "hover:bg-cyan-950/40 cursor-pointer transition border-b border-slate-800/40";
         tr.onclick = () => {
           selectElement(el.z);
@@ -1468,37 +1527,53 @@
     }
 
     let quizScore = 0;
+    let quizStreak = 0;
     let currentQuizItem = null;
 
+    const NOBLE_GASES = [
+      { z: 2, symbol: "He", name: "Hélio" },
+      { z: 10, symbol: "Ne", name: "Neônio" },
+      { z: 18, symbol: "Ar", name: "Argônio" },
+      { z: 36, symbol: "Kr", name: "Criptônio" },
+      { z: 54, symbol: "Xe", name: "Xenônio" },
+      { z: 86, symbol: "Rn", name: "Radônio" }
+    ];
+
     const QUIZ_QUESTIONS = [
+      // 1. Elétrons de Valência (aleatório)
       {
         type: 'valence',
         get: () => {
-          const el = ELEMENTS[Math.floor(Math.random() * 54)];
+          const el = ELEMENTS[Math.floor(Math.random() * 56)];
+          const correct = `${el.valenceElectrons} elétron(s)`;
           return {
             category: 'Camada de Valência',
             question: `Quantos elétrons de valência possui o átomo neutro de ${el.name} (${el.symbol}, Z = ${el.z})?`,
-            correct: `${el.valenceElectrons} elétron(s)`,
+            correct: correct,
+            explanation: `O ${el.name} (${el.symbol}) possui a camada ${LAYER_LETTERS[el.maxN]} (n=${el.maxN}) como camada de valência física mais externa, contendo um total de ${el.valenceElectrons} elétron(s).`,
             options: shuffle([
-              `${el.valenceElectrons} elétron(s)`,
+              correct,
               `${(el.valenceElectrons % 8) + 1} elétron(s)`,
               `${Math.max(1, el.valenceElectrons - 2)} elétron(s)`,
-              `${el.valenceElectrons + 3} elétron(s)`
+              `${el.valenceElectrons + (el.valenceElectrons > 5 ? -3 : 2)} elétron(s)`
             ])
           };
         }
       },
+      // 2. Subnível Mais Energético (Aufbau)
       {
         type: 'most_energetic',
         get: () => {
-          const el = ELEMENTS[Math.floor(Math.random() * 60) + 10];
+          const el = ELEMENTS[Math.floor(Math.random() * 70) + 10];
           const plain = el.mostEnergetic.replace(/<sup>/g, '^').replace(/<\/sup>/g, '');
+          const correct = plain;
           return {
             category: 'Subnível Mais Energético',
-            question: `Qual é o subnível mais energético (último a ser preenchido por Aufbau) do ${el.name} (${el.symbol}, Z = ${el.z})?`,
-            correct: plain,
+            question: `Qual é o subnível mais energético (último a ser preenchido pela regra de Aufbau) do ${el.name} (${el.symbol}, Z = ${el.z})?`,
+            correct: correct,
+            explanation: `Pelo Princípio de Aufbau e pela regra empírica de Madelung (n+l), o último subnível a receber elétrons no ${el.name} no estado fundamental é o ${plain}.`,
             options: shuffle([
-              plain,
+              correct,
               `${SUBNIVEIS_ORDER[Math.max(0, SUBNIVEIS_ORDER.findIndex(s => s.name === plain.split('^')[0]) - 1)].name}^${plain.split('^')[1] || '2'}`,
               `4s^2`,
               `3d^10`
@@ -1506,23 +1581,173 @@
           };
         }
       },
+      // 3. Mecanismo de Ionização com elementos variados (perda da camada de valência)
       {
-        type: 'ionization',
+        type: 'ionization_dynamic',
         get: () => {
+          const testElements = [
+            { el: ELEMENTS[25], ion: "Fe²⁺", lossCount: 2, subFrom: "4s", why: "camada n=4 mais externa" },
+            { el: ELEMENTS[21], ion: "Ti²⁺", lossCount: 2, subFrom: "4s", why: "camada n=4 mais externa" },
+            { el: ELEMENTS[29], ion: "Zn²⁺", lossCount: 2, subFrom: "4s", why: "camada n=4 mais externa" },
+            { el: ELEMENTS[49], ion: "Sn²⁺", lossCount: 2, subFrom: "5p", why: "maior l dentro da camada n=5" },
+            { el: ELEMENTS[50], ion: "Sb³⁺", lossCount: 3, subFrom: "5p", why: "maior l dentro da camada n=5" },
+            { el: ELEMENTS[81], ion: "Pb²⁺", lossCount: 2, subFrom: "6p", why: "maior l dentro da camada n=6" },
+            { el: ELEMENTS[74], ion: "Re²⁺", lossCount: 2, subFrom: "6s", why: "camada n=6 mais externa" },
+            { el: ELEMENTS[11], ion: "Mg²⁺", lossCount: 2, subFrom: "3s", why: "camada n=3 de valência" }
+          ];
+          const item = testElements[Math.floor(Math.random() * testElements.length)];
+          const correct = `Do subnível ${item.subFrom} (${item.why})`;
           return {
-            category: 'Mecanismo de Ionização',
-            question: 'Ao formar o cátion Fe²⁺ a partir do Ferro neutro (Z=26: 1s² 2s² 2p⁶ 3s² 3p⁶ 4s² 3d⁶), de qual subnível saem os 2 elétrons?',
-            correct: 'Do subnível 4s (camada de valência mais externa fisicamente)',
+            category: 'Mecanismo de Ionização (Cátions)',
+            question: `Ao formar o cátion ${item.ion} a partir do átomo neutro de ${item.el.name} (${item.el.symbol}, Z=${item.el.z}), de onde saem prioritariamente os elétrons?`,
+            correct: correct,
+            explanation: `Ao oxidar e virar cátion, o elétron sai sempre da camada de valência fisicamente mais distante do núcleo (maior n; se houver empate em n, sai do subnível com maior l). Portanto, saem de ${item.subFrom}.`,
             options: shuffle([
-              'Do subnível 4s (camada de valência mais externa fisicamente)',
-              'Do subnível 3d (por ser o mais energético)',
-              'Do subnível 3p (por estar no nível 3)',
-              'Indiferentemente de 4s ou 3d'
+              correct,
+              `Do subnível ${item.el.mostEnergetic.replace(/<sup>/g, '^').replace(/<\/sup>/g, '')} (por ter maior energia)`,
+              `Diretamente do subnível 1s (por estar próximo ao núcleo)`,
+              `Indiferentemente de qualquer subnível preenchido`
             ])
+          };
+        }
+      },
+      // 4. Identificação do Bloco Quântico (s, p, d, f)
+      {
+        type: 'quantum_block',
+        get: () => {
+          const el = ELEMENTS[Math.floor(Math.random() * 88)];
+          const lastSubName = el.mostEnergetic.split('<')[0].replace(/[^a-z]/gi, '');
+          const blockLetter = lastSubName.slice(-1);
+          const correct = `Bloco ${blockLetter}`;
+          return {
+            category: 'Classificação em Blocos Quânticos',
+            question: `A qual bloco quântico da Tabela Periódica pertence o elemento ${el.name} (${el.symbol}, Z = ${el.z}), de acordo com seu subnível mais energético?`,
+            correct: correct,
+            explanation: `O subnível mais energético do ${el.name} é o ${el.mostEnergetic.replace(/<sup>/g, '^').replace(/<\/sup>/g, '')}, cujo orbital é do tipo '${blockLetter}'. Por isso, pertence ao Bloco ${blockLetter}.`,
+            options: shuffle(['Bloco s', 'Bloco p', 'Bloco d', 'Bloco f'])
+          };
+        }
+      },
+      // 5. Capacidade Máxima de Orbitais e Subníveis
+      {
+        type: 'capacity',
+        get: () => {
+          const subTypes = [
+            { type: 's', cap: 2, orbitals: 1 },
+            { type: 'p', cap: 6, orbitals: 3 },
+            { type: 'd', cap: 10, orbitals: 5 },
+            { type: 'f', cap: 14, orbitals: 7 }
+          ];
+          const chosen = subTypes[Math.floor(Math.random() * subTypes.length)];
+          const nSample = Math.floor(Math.random() * 3) + (chosen.type === 'f' ? 4 : (chosen.type === 'd' ? 3 : 2));
+          const subName = `${nSample}${chosen.type}`;
+          const correct = `${chosen.cap} elétrons`;
+          return {
+            category: 'Capacidade de Subníveis',
+            question: `Qual é o número máximo de elétrons que o subnível ${subName} pode comportar no total?`,
+            correct: correct,
+            explanation: `Qualquer subnível do tipo '${chosen.type}' possui exatamente ${chosen.orbitals} orbital(is). Como cada orbital comporta no máximo 2 elétrons com spins opostos (Princípio de Pauli), a capacidade total é de ${chosen.cap} elétrons.`,
+            options: shuffle([correct, '2 elétrons', '6 elétrons', '10 elétrons', '14 elétrons'])
+          };
+        }
+      },
+      // 6. Contagem de Elétrons em Camada Específica (Ordem Geométrica)
+      {
+        type: 'electrons_in_layer',
+        get: () => {
+          const candidates = ELEMENTS.filter(e => e.z >= 12 && e.z <= 56);
+          const el = candidates[Math.floor(Math.random() * candidates.length)];
+          const validLayers = [];
+          for (let n = 1; n <= el.maxN; n++) {
+            if (el.layers[n] > 0) validLayers.push(n);
+          }
+          const chosenN = validLayers[Math.floor(Math.random() * validLayers.length)];
+          const letter = LAYER_LETTERS[chosenN];
+          const count = el.layers[chosenN];
+          const correct = `${count} elétrons`;
+          return {
+            category: 'Distribuição Geométrica por Camadas',
+            question: `Na distribuição por camadas do átomo neutro de ${el.name} (${el.symbol}, Z = ${el.z}), quantos elétrons existem na camada ${letter} (n = ${chosenN})?`,
+            correct: correct,
+            explanation: `Agrupando todos os subníveis pertencentes ao nível quântico principal n = ${chosenN} (camada ${letter}), o ${el.name} totaliza exatamente ${count} elétrons nessa camada.`,
+            options: shuffle([
+              correct,
+              `${Math.max(1, count - 4)} elétrons`,
+              `${count + 2} elétrons`,
+              `${count > 10 ? count - 6 : count + 8} elétrons`
+            ])
+          };
+        }
+      },
+      // 7. Notação Abreviada com Cerne de Gás Nobre
+      {
+        type: 'noble_gas_core',
+        get: () => {
+          const targets = ELEMENTS.filter(e => e.z > 2 && e.z <= 88 && !isNobleGas(e.z));
+          const el = targets[Math.floor(Math.random() * targets.length)];
+          let refGas = NOBLE_GASES[0];
+          for (let i = NOBLE_GASES.length - 1; i >= 0; i--) {
+            if (NOBLE_GASES[i].z < el.z) {
+              refGas = NOBLE_GASES[i];
+              break;
+            }
+          }
+          const correct = `[${refGas.symbol}] (${refGas.name}, Z = ${refGas.z})`;
+          return {
+            category: 'Cerne de Gás Nobre (Notação Simplificada)',
+            question: `Ao escrever a configuração eletrônica simplificada do elemento ${el.name} (${el.symbol}, Z = ${el.z}), qual gás nobre é utilizado como referência inicial (cerne)?`,
+            correct: correct,
+            explanation: `A notação simplificada utiliza o gás nobre imediatamente anterior ao elemento. O gás nobre precedente ao ${el.name} (Z=${el.z}) é o ${refGas.name} ([${refGas.symbol}], Z=${refGas.z}).`,
+            options: shuffle([
+              correct,
+              ...NOBLE_GASES.filter(g => g.symbol !== refGas.symbol).slice(0, 3).map(g => `[${g.symbol}] (${g.name}, Z = ${g.z})`)
+            ])
+          };
+        }
+      },
+      // 8. Princípios e Leis Quânticas Fundamentais
+      {
+        type: 'laws_theory',
+        get: () => {
+          const theoryPool = [
+            {
+              q: "Qual princípio quântico afirma que dois elétrons em um mesmo átomo não podem possuir os mesmos quatro números quânticos?",
+              ans: "Princípio de Exclusão de Pauli",
+              why: "Wolfgang Pauli formulou esse princípio em 1925, estabelecendo que cada orbital comporta no máximo dois elétrons com spins antiparalelos.",
+              wrong: ["Regra de Hund", "Princípio de Aufbau", "Princípio da Incerteza de Heisenberg"]
+            },
+            {
+              q: "Qual regra postula que, em orbitais de mesma energia (degenerados), os elétrons entram primeiro desemparelhados com o mesmo sentido de spin?",
+              ans: "Regra de Hund",
+              why: "A Regra de Hund (regra da máxima multiplicidade) minimiza a repulsão elétron-elétron antes do emparelhamento.",
+              wrong: ["Princípio de Exclusão de Pauli", "Regra do Octeto de Lewis", "Lei de Lavoisier"]
+            },
+            {
+              q: "O que preconiza o Princípio de Aufbau (construção)?",
+              ans: "Os orbitais devem ser preenchidos por ordem estritamente crescente de energia",
+              why: "Aufbau significa 'construção' em alemão e assegura que os elétrons ocupem os estados de menor energia disponíveis no estado fundamental.",
+              wrong: [
+                "Os elétrons devem orbitar sempre na maior distância possível",
+                "Todos os elétrons devem ter spin idêntico em qualquer subnível",
+                "A camada de valência deve ser sempre preenchida antes das camadas internas"
+              ]
+            }
+          ];
+          const item = theoryPool[Math.floor(Math.random() * theoryPool.length)];
+          return {
+            category: 'Teoria e Leis Quânticas',
+            question: item.q,
+            correct: item.ans,
+            explanation: item.why,
+            options: shuffle([item.ans, ...item.wrong])
           };
         }
       }
     ];
+
+    function isNobleGas(z) {
+      return [2, 10, 18, 36, 54, 86, 118].includes(z);
+    }
 
     function shuffle(arr) {
       return [...new Set(arr)].sort(() => Math.random() - 0.5);
@@ -1530,7 +1755,10 @@
 
     function initQuiz() {
       quizScore = 0;
+      quizStreak = 0;
       document.getElementById('quizScore').innerText = `${quizScore} pts`;
+      const streakEl = document.getElementById('quizStreak');
+      if (streakEl) streakEl.innerText = `🔥 ${quizStreak}`;
       nextQuizQuestion();
     }
 
@@ -1559,6 +1787,7 @@
     function handleQuizAnswer(selected, buttonEl) {
       const feedback = document.getElementById('quizFeedback');
       const isCorrect = (selected === currentQuizItem.correct);
+      const streakEl = document.getElementById('quizStreak');
 
       document.querySelectorAll('#quizOptions button').forEach(b => {
         b.disabled = true;
@@ -1569,18 +1798,31 @@
 
       if (isCorrect) {
         quizScore += 10;
+        quizStreak += 1;
         playTone(659.25, 'sine', 0.15);
         buttonEl.classList.add('bg-emerald-950/60', 'border-emerald-500', 'text-emerald-300');
-        feedback.className = 'p-3 rounded-xl text-xs font-semibold bg-emerald-950/50 border border-emerald-500/50 text-emerald-300 flex items-center gap-2';
-        feedback.innerHTML = '<i class="fa-solid fa-check-circle"></i> Excelente! Resposta correta (+10 pontos).';
+        feedback.className = 'p-3.5 rounded-xl text-xs font-medium bg-emerald-950/60 border border-emerald-500/50 text-emerald-200 flex flex-col gap-1.5 shadow-md';
+        feedback.innerHTML = `
+          <div class="flex items-center gap-2 font-bold text-emerald-300">
+            <i class="fa-solid fa-check-circle text-sm"></i> Excelente! Resposta correta (+10 pontos).
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">${currentQuizItem.explanation || ''}</p>
+        `;
       } else {
+        quizStreak = 0;
         playTone(220, 'sawtooth', 0.2);
         buttonEl.classList.add('bg-red-950/60', 'border-red-500', 'text-red-300');
-        feedback.className = 'p-3 rounded-xl text-xs font-semibold bg-red-950/50 border border-red-500/50 text-red-300 flex items-center gap-2';
-        feedback.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Incorreto! Resposta certa: ${currentQuizItem.correct}`;
+        feedback.className = 'p-3.5 rounded-xl text-xs font-medium bg-red-950/60 border border-red-500/50 text-red-200 flex flex-col gap-1.5 shadow-md';
+        feedback.innerHTML = `
+          <div class="flex items-center gap-2 font-bold text-red-300">
+            <i class="fa-solid fa-circle-xmark text-sm"></i> Resposta Incorreta! A opção certa é: <b>${currentQuizItem.correct}</b>
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">${currentQuizItem.explanation || ''}</p>
+        `;
       }
 
       document.getElementById('quizScore').innerText = `${quizScore} pts`;
+      if (streakEl) streakEl.innerText = `🔥 ${quizStreak}`;
       feedback.classList.remove('hidden');
     }
 
